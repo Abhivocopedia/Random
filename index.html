@@ -24,6 +24,7 @@
 
     * { box-sizing: border-box; }
     html { min-width: 320px; background: var(--paper); }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -38,6 +39,7 @@
 
     button, input { font: inherit; }
     button { cursor: pointer; }
+
     button:focus-visible, input:focus-visible {
       outline: 3px solid rgba(73, 60, 255, .35);
       outline-offset: 3px;
@@ -111,7 +113,8 @@
     .screen { flex: 1; display: none; }
     .screen.active { display: flex; }
 
-    /* First-time setup */
+    /* SETUP SCREEN */
+
     .setup-screen {
       align-items: center;
       justify-content: center;
@@ -253,7 +256,8 @@
 
     .form-error.show { display: block; }
 
-    /* Main picker */
+    /* PICKER SCREEN */
+
     .picker-screen {
       align-items: center;
       justify-content: center;
@@ -382,6 +386,19 @@
       }
     }
 
+    .number.rolling {
+      color: var(--blue);
+      animation: rollPulse .18s ease-in-out infinite alternate;
+    }
+
+    @keyframes rollPulse {
+      to {
+        transform: scale(.88);
+        opacity: .48;
+        filter: blur(2px);
+      }
+    }
+
     .result-message {
       min-height: 23px;
       margin: 0 0 23px;
@@ -393,6 +410,9 @@
       color: var(--ink);
       font-weight: 850;
     }
+
+    .picker-heading.done { color: #238653; }
+    .result-message.done { color: #238653; font-weight: 750; }
 
     .main-button {
       width: min(370px, 100%);
@@ -422,9 +442,10 @@
     .main-button:active { transform: translateY(0) scale(.99); }
 
     .main-button:disabled {
-      cursor: wait;
-      opacity: .75;
+      cursor: not-allowed;
+      opacity: .5;
       transform: none;
+      box-shadow: none;
     }
 
     .button-arrow {
@@ -443,7 +464,10 @@
       border-bottom: 1px solid var(--line);
     }
 
-    .stat { min-width: 0; padding: 0 13px; }
+    .stat {
+      min-width: 0;
+      padding: 0 13px;
+    }
 
     .stat + .stat { border-left: 1px solid var(--line); }
 
@@ -630,6 +654,7 @@
     }
   </style>
 </head>
+
 <body>
   <main class="page">
     <header class="topbar">
@@ -637,17 +662,22 @@
         <span class="brand-mark" aria-hidden="true">#</span>
         <span class="brand-name">PICK<span>.</span>ONE</span>
       </a>
+
       <div class="top-meta">
         <span class="saved-dot" aria-hidden="true"></span>
         <span id="saveLabel">Ready when you are</span>
       </div>
     </header>
 
-    <!-- First-time setup screen -->
+    <!-- FIRST-TIME SETUP -->
     <section class="screen setup-screen" id="setupScreen" aria-labelledby="setupTitle">
       <div class="setup-wrap">
         <div class="kicker">One range. One random result.</div>
-        <h1 class="setup-title" id="setupTitle">Let’s set<br />the <span>scene.</span></h1>
+
+        <h1 class="setup-title" id="setupTitle">
+          Let’s set<br />the <span>scene.</span>
+        </h1>
+
         <p class="setup-copy">
           Tell us who's playing and how high the number can go.
           We'll handle the random part from there.
@@ -689,6 +719,7 @@
                 required
               />
             </div>
+
             <p class="field-note">
               Example: enter 100 to pick any whole number from 1 through 100.
             </p>
@@ -703,15 +734,16 @@
       </div>
     </section>
 
-    <!-- Main selector screen -->
+    <!-- MAIN NUMBER PICKER -->
     <section class="screen picker-screen" id="pickerScreen" aria-label="Random number selector">
       <div class="picker-wrap">
+
         <div class="welcome-line">
           PICKER FOR <strong id="welcomeName">PLAYER</strong>
         </div>
 
         <div class="range-chip">
-          ACTIVE RANGE <b id="rangeLabel">01 — 100</b>
+          ACTIVE RANGE <b id="rangeLabel">1 — 100</b>
         </div>
 
         <p class="picker-heading" id="pickerHeading">
@@ -736,24 +768,28 @@
             <span class="stat-label">PLAYER</span>
             <span class="stat-value" id="statName">—</span>
           </div>
+
           <div class="stat">
             <span class="stat-label">NUMBER RANGE</span>
             <span class="stat-value" id="statRange">1 — 100</span>
           </div>
+
           <div class="stat">
-            <span class="stat-label">TOTAL DRAWS</span>
-            <span class="stat-value" id="statDraws">0</span>
+            <span class="stat-label">PICKS LEFT</span>
+            <span class="stat-value" id="statRemaining">0</span>
           </div>
         </div>
 
         <div class="actions">
           <button class="text-action clear" id="clearButton" type="button">
-            Clear result
+            Reset draw
           </button>
+
           <button class="text-action" id="editButton" type="button">
             Change setup
           </button>
         </div>
+
       </div>
     </section>
 
@@ -771,7 +807,14 @@
     (() => {
       'use strict';
 
-      const STORAGE_KEY = 'pick-one:session:v2';
+      // New version: stores the no-repeat shuffle state.
+      const STORAGE_KEY = 'pick-one:session:v3';
+
+      const LEGACY_KEYS = [
+        'pick-one:session:v2',
+        'lucky-exe:number-draw:v1'
+      ];
+
       const MAX_ALLOWED = 1_000_000_000;
 
       const $ = (id) => document.getElementById(id);
@@ -793,83 +836,154 @@
         '(prefers-reduced-motion: reduce)'
       ).matches;
 
+      let migratedLegacySession = false;
       let session = loadSession();
       let busy = false;
       let toastTimer;
 
+      // Creates a fresh selection cycle.
+      function createSession(name, max) {
+        return {
+          version: 3,
+          name,
+          max,
+          result: null,
+          drawCount: 0,
+          remaining: max,
+          drawnAt: null,
+
+          // Stores only changed positions in the shuffle.
+          // Memory usage grows with picks, not the maximum range.
+          pool: {}
+        };
+      }
+
+      // Validate saved data before restoring it.
       function isValidSession(value) {
+        if (!value || value.version !== 3) return false;
+
+        if (
+          typeof value.name !== 'string' ||
+          !value.name.trim() ||
+          value.name.length > 32
+        ) return false;
+
+        if (
+          !Number.isSafeInteger(value.max) ||
+          value.max < 1 ||
+          value.max > MAX_ALLOWED
+        ) return false;
+
+        if (
+          !Number.isSafeInteger(value.drawCount) ||
+          value.drawCount < 0 ||
+          value.drawCount > value.max
+        ) return false;
+
+        if (
+          !Number.isSafeInteger(value.remaining) ||
+          value.remaining !== value.max - value.drawCount
+        ) return false;
+
+        if (
+          value.result !== null &&
+          (
+            !Number.isSafeInteger(value.result) ||
+            value.result < 1 ||
+            value.result > value.max
+          )
+        ) return false;
+
+        if (
+          (value.drawCount === 0) !== (value.result === null)
+        ) return false;
+
+        if (
+          value.drawnAt !== null &&
+          typeof value.drawnAt !== 'string'
+        ) return false;
+
+        if (
+          !value.pool ||
+          typeof value.pool !== 'object' ||
+          Array.isArray(value.pool)
+        ) return false;
+
+        const entries = Object.entries(value.pool);
+
+        if (entries.length > value.drawCount) return false;
+
+        for (const [key, mappedValue] of entries) {
+          const index = Number(key);
+
+          if (
+            !/^(0|[1-9]\d*)$/.test(key) ||
+            !Number.isSafeInteger(index)
+          ) return false;
+
+          if (index < 0 || index >= value.remaining) return false;
+
+          if (
+            !Number.isSafeInteger(mappedValue) ||
+            mappedValue < 0 ||
+            mappedValue >= value.max
+          ) return false;
+        }
+
+        return true;
+      }
+
+      function isValidLegacySetup(value) {
         return value &&
           typeof value.name === 'string' &&
           value.name.trim().length > 0 &&
-          value.name.length <= 32 &&
           Number.isSafeInteger(value.max) &&
           value.max >= 1 &&
-          value.max <= MAX_ALLOWED &&
-          (
-            value.result === null ||
-            (
-              Number.isSafeInteger(value.result) &&
-              value.result >= 1 &&
-              value.result <= value.max
-            )
-          ) &&
-          Number.isSafeInteger(value.drawCount) &&
-          value.drawCount >= 0 &&
-          (
-            value.drawnAt === null ||
-            typeof value.drawnAt === 'string'
-          );
+          value.max <= MAX_ALLOWED;
       }
 
+      // Restore saved progress or migrate an older setup.
       function loadSession() {
         try {
-          const raw = localStorage.getItem(STORAGE_KEY);
+          const currentRaw = localStorage.getItem(STORAGE_KEY);
 
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (isValidSession(parsed)) return parsed;
+          if (currentRaw) {
+            const current = JSON.parse(currentRaw);
+
+            if (isValidSession(current)) {
+              return current;
+            }
           }
 
-          // Migrate a session saved by the previous LUCKY.EXE version.
-          const oldRaw = localStorage.getItem(
-            'lucky-exe:number-draw:v1'
-          );
+          // Previous versions did not save the entire draw history.
+          // Preserve the name and range, but start a fresh cycle so
+          // previously selected numbers cannot unknowingly repeat.
+          for (const key of LEGACY_KEYS) {
+            const legacyRaw = localStorage.getItem(key);
 
-          if (oldRaw) {
-            const old = JSON.parse(oldRaw);
+            if (!legacyRaw) continue;
 
-            if (
-              old &&
-              typeof old.name === 'string' &&
-              old.name.trim() &&
-              Number.isSafeInteger(old.max) &&
-              old.max >= 1 &&
-              old.max <= MAX_ALLOWED &&
-              Number.isSafeInteger(old.result) &&
-              old.result >= 1 &&
-              old.result <= old.max &&
-              Number.isSafeInteger(old.drawCount) &&
-              old.drawCount >= 1
-            ) {
-              return {
-                name: old.name.trim(),
-                max: old.max,
-                result: old.result,
-                drawCount: old.drawCount,
-                drawnAt: typeof old.drawnAt === 'string'
-                  ? old.drawnAt
-                  : null
-              };
+            const legacy = JSON.parse(legacyRaw);
+
+            if (isValidLegacySetup(legacy)) {
+              migratedLegacySession = true;
+
+              return createSession(
+                legacy.name.trim().replace(/\s+/g, ' '),
+                legacy.max
+              );
             }
           }
 
           return null;
+
         } catch (error) {
           console.warn('Could not load saved picker:', error);
           return null;
         }
       }
 
+      // Save the entire state, including the remaining shuffle pool.
       function saveSession() {
         try {
           localStorage.setItem(
@@ -878,16 +992,21 @@
           );
 
           $('saveLabel').textContent = 'Saved on this device';
+
           return true;
+
         } catch (error) {
           console.warn('Could not save picker:', error);
+
           $('saveLabel').textContent = 'Save unavailable';
-          showToast('Browser storage is unavailable');
+
+          showToast('Could not save. Refresh may lose progress.');
+
           return false;
         }
       }
 
-      // Cryptographically secure, unbiased random integer from 1 to max.
+      // Uniform random integer between 1 and max, inclusive.
       function randomInteger(max) {
         if (
           window.crypto &&
@@ -910,6 +1029,58 @@
         return Math.floor(Math.random() * max) + 1;
       }
 
+      /*
+       * NO-REPEAT RANDOM SELECTION
+       *
+       * Sparse Fisher-Yates shuffle:
+       * 1. Select a random remaining position.
+       * 2. Read its value.
+       * 3. Replace that position with the last remaining value.
+       * 4. Shrink the remaining pool.
+       *
+       * Every number can therefore be selected only once.
+       */
+      function drawWithoutReplacement() {
+        if (!session || session.remaining <= 0) {
+          return null;
+        }
+
+        const lastIndex = session.remaining - 1;
+
+        const chosenIndex =
+          randomInteger(session.remaining) - 1;
+
+        const pool = session.pool;
+
+        const has = (key) =>
+          Object.prototype.hasOwnProperty.call(pool, key);
+
+        const chosenValue = has(chosenIndex)
+          ? pool[chosenIndex]
+          : chosenIndex;
+
+        const lastValue = has(lastIndex)
+          ? pool[lastIndex]
+          : lastIndex;
+
+        if (chosenIndex !== lastIndex) {
+          if (lastValue === chosenIndex) {
+            delete pool[chosenIndex];
+          } else {
+            pool[chosenIndex] = lastValue;
+          }
+        }
+
+        delete pool[lastIndex];
+
+        session.remaining -= 1;
+        session.drawCount += 1;
+        session.result = chosenValue + 1;
+        session.drawnAt = new Date().toISOString();
+
+        return session.result;
+      }
+
       function showToast(message) {
         toast.textContent = message;
         toast.classList.add('show');
@@ -918,7 +1089,7 @@
 
         toastTimer = window.setTimeout(() => {
           toast.classList.remove('show');
-        }, 2200);
+        }, 2400);
       }
 
       function showScreen(screen) {
@@ -933,39 +1104,49 @@
         );
       }
 
+      // Update all picker information from the saved session.
       function updatePicker() {
         if (!session) return;
+
+        const complete = session.remaining === 0;
+        const hasResult = session.result !== null;
+
+        const formattedMax = session.max.toLocaleString();
 
         $('welcomeName').textContent = session.name;
 
         $('rangeLabel').textContent =
-          `1 — ${session.max.toLocaleString()}`;
+          `1 — ${formattedMax}`;
 
         $('statName').textContent = session.name;
 
         $('statRange').textContent =
-          `1 — ${session.max.toLocaleString()}`;
+          `1 — ${formattedMax}`;
 
-        $('statDraws').textContent =
-          session.drawCount.toLocaleString();
+        $('statRemaining').textContent =
+          session.remaining.toLocaleString();
 
-        if (session.result === null) {
-          resultNumber.textContent = '?';
-          resultNumber.classList.add('empty');
+        pickerHeading.classList.toggle('done', complete);
+        resultMessage.classList.toggle('done', complete);
 
-          pickerHeading.textContent = 'Your number is waiting';
+        if (complete) {
+          // Finished state.
+          resultNumber.textContent =
+            session.result.toLocaleString();
+
+          resultNumber.classList.remove('empty');
+
+          pickerHeading.textContent = "YOU'RE DONE!";
 
           resultMessage.textContent =
-            'Hit the button. Leave the decision to chance.';
+            `Every number from 1 to ${formattedMax} has been picked exactly once. No repeats.`;
 
-          buttonLabel.textContent =
-            session.drawCount > 0
-              ? 'SELECT AGAIN'
-              : 'SELECT A NUMBER';
+          buttonLabel.textContent = 'ALL NUMBERS PICKED';
 
-          $('saveLabel').textContent =
-            'Setup saved on this device';
-        } else {
+          $('saveLabel').textContent = 'Draw complete · Saved';
+
+        } else if (hasResult) {
+          // A number was selected, but more remain.
           resultNumber.textContent =
             session.result.toLocaleString();
 
@@ -974,15 +1155,36 @@
           pickerHeading.textContent = 'THE PICK IS IN';
 
           resultMessage.textContent =
-            `Number ${session.result.toLocaleString()} picked for ${session.name}.`;
+            `Number ${session.result.toLocaleString()} picked for ${session.name} · ${session.remaining.toLocaleString()} left.`;
 
-          buttonLabel.textContent = 'DRAW AGAIN';
+          buttonLabel.textContent = 'DRAW NEXT NUMBER';
 
           $('saveLabel').textContent =
-            'Result saved on this device';
+            'Progress saved on this device';
+
+        } else {
+          // Initial state.
+          resultNumber.textContent = '?';
+
+          resultNumber.classList.add('empty');
+
+          pickerHeading.textContent =
+            'Your number is waiting';
+
+          resultMessage.textContent =
+            'Hit the button. Leave the decision to chance.';
+
+          buttonLabel.textContent = 'SELECT A NUMBER';
+
+          $('saveLabel').textContent =
+            'Setup saved on this device';
         }
+
+        // No more selections after the pool is exhausted.
+        selectButton.disabled = busy || complete;
       }
 
+      // Animate the result without displaying fake intermediate picks.
       function animateResult(finalNumber) {
         if (reducedMotion) {
           resultNumber.textContent =
@@ -991,35 +1193,25 @@
           return Promise.resolve();
         }
 
-        return new Promise((resolve) => {
-          const duration = 1050;
-          const start = performance.now();
-          let lastUpdate = 0;
+        resultNumber.textContent = '…';
 
-          resultNumber.classList.remove('empty');
+        resultNumber.classList.remove('empty');
+        resultNumber.classList.add('rolling');
+
+        return new Promise((resolve) => {
+          const start = performance.now();
+          const duration = 850;
 
           function frame(now) {
-            const elapsed = now - start;
-            const progress = Math.min(elapsed / duration, 1);
-
-            const interval =
-              35 + Math.pow(progress, 2) * 150;
-
-            if (
-              now - lastUpdate >= interval ||
-              progress === 1
-            ) {
-              resultNumber.textContent =
-                progress === 1
-                  ? finalNumber.toLocaleString()
-                  : randomInteger(session.max).toLocaleString();
-
-              lastUpdate = now;
-            }
-
-            if (progress < 1) {
+            if (now - start < duration) {
               requestAnimationFrame(frame);
+
             } else {
+              resultNumber.textContent =
+                finalNumber.toLocaleString();
+
+              resultNumber.classList.remove('rolling');
+
               resolve();
             }
           }
@@ -1028,6 +1220,7 @@
         });
       }
 
+      // Validate the first-time setup.
       function validateSetup() {
         const name = nameInput.value
           .trim()
@@ -1044,6 +1237,7 @@
 
           setupError.classList.add('show');
           nameInput.focus();
+
           return null;
         }
 
@@ -1057,55 +1251,73 @@
 
           setupError.classList.add('show');
           maxInput.focus();
+
           return null;
         }
 
         return { name, max };
       }
 
-      // Initial setup or manually changed setup.
+      // First-time setup or changed setup.
       setupForm.addEventListener('submit', (event) => {
         event.preventDefault();
 
         const values = validateSetup();
+
         if (!values) return;
 
-        session = {
-          ...values,
-          result: null,
-          drawCount: 0,
-          drawnAt: null
-        };
+        session = createSession(
+          values.name,
+          values.max
+        );
 
         saveSession();
         updatePicker();
         showScreen('picker');
 
-        showToast('Your picker is ready');
+        showToast('Your no-repeat picker is ready');
       });
 
-      // Main selector button.
+      // MAIN SELECTOR BUTTON.
       selectButton.addEventListener('click', async () => {
-        if (!session || busy) return;
+        if (
+          !session ||
+          busy ||
+          session.remaining <= 0
+        ) {
+          return;
+        }
 
         busy = true;
+
         selectButton.disabled = true;
 
         buttonLabel.textContent = 'PICKING...';
-        pickerHeading.textContent = 'LETTING CHANCE DECIDE';
-        resultMessage.textContent = 'Hold that thought...';
 
-        const chosen = randomInteger(session.max);
+        pickerHeading.textContent =
+          'LETTING CHANCE DECIDE';
 
-        session.result = chosen;
-        session.drawCount += 1;
-        session.drawnAt = new Date().toISOString();
+        pickerHeading.classList.remove('done');
+        resultMessage.classList.remove('done');
 
-        // Save before animation, so refresh never loses the final result.
+        resultMessage.textContent =
+          'Finding a number that has not been picked...';
+
+        // Pick a number without replacement.
+        const chosen = drawWithoutReplacement();
+
+        if (chosen === null) {
+          busy = false;
+          updatePicker();
+          return;
+        }
+
+        // Save the chosen value and shuffle state BEFORE animation.
+        // Refreshing during the reveal restores the final result.
         saveSession();
 
-        $('statDraws').textContent =
-          session.drawCount.toLocaleString();
+        $('statRemaining').textContent =
+          session.remaining.toLocaleString();
 
         await animateResult(chosen);
 
@@ -1116,30 +1328,44 @@
 
         resultNumber.classList.add('reveal');
 
-        updatePicker();
-
-        selectButton.disabled = false;
         busy = false;
 
-        showToast('Result saved. Refresh-safe.');
+        updatePicker();
+
+        if (session.remaining === 0) {
+          showToast(
+            "You're done! Every number was picked once."
+          );
+        } else {
+          showToast('Number picked. No repeats.');
+        }
       });
 
-      // Clear the selected number but retain the name and range.
+      // RESET DRAW.
+      // This explicitly starts a fresh cycle.
       $('clearButton').addEventListener('click', () => {
         if (!session || busy) return;
 
-        session.result = null;
-        session.drawnAt = null;
+        const confirmed = window.confirm(
+          'Reset this draw? All picks in the current cycle will be cleared and the full range will become available again.'
+        );
+
+        if (!confirmed) return;
+
+        session = createSession(
+          session.name,
+          session.max
+        );
 
         saveSession();
         updatePicker();
 
         showToast(
-          'Result cleared. Your setup is still saved.'
+          'Draw reset. The full range is ready again.'
         );
       });
 
-      // Reopen setup only when explicitly requested.
+      // Open setup only when explicitly requested.
       $('editButton').addEventListener('click', () => {
         if (busy || !session) return;
 
@@ -1149,16 +1375,27 @@
         setupError.classList.remove('show');
 
         showScreen('setup');
+
         nameInput.focus();
       });
 
-      // Returning visitors skip setup and land directly on the picker.
+      // RESTORE SAVED SESSION.
+      // Returning visitors skip setup completely.
       if (session) {
+        saveSession();
         updatePicker();
         showScreen('picker');
+
+        if (migratedLegacySession) {
+          showToast(
+            'Setup restored. A fresh no-repeat cycle has started.'
+          );
+        }
+
       } else {
         showScreen('setup');
       }
+
     })();
   </script>
 </body>
