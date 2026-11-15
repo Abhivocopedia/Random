@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#090b12" />
+  <meta name="description" content="A clean, dramatic random number picker. Save a name, set a range, and draw a number." />
+  <title>Lucky.exe — Random Number Selector</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b12;
+      --panel: rgba(18, 21, 33, .78);
+      --panel-strong: #121521;
+      --line: rgba(255,255,255,.09);
+      --muted: #85899b;
+      --text: #f4f5fb;
+      --lime: #c7ff57;
+      --lime-dark: #9bcf2d;
+      --violet: #9b86ff;
+      --pink: #ff73b7;
+      --danger: #ff6b76;
+      --radius-xl: 28px;
+      --shadow: 0 24px 80px rgba(0,0,0,.38);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(ellipse at 12% 0%, rgba(155,134,255,.15), transparent 34rem),
+        radial-gradient(ellipse at 92% 18%, rgba(199,255,87,.09), transparent 30rem),
+        radial-gradient(ellipse at 55% 100%, rgba(255,115,183,.07), transparent 36rem),
+        var(--bg);
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .18;
+      background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(to bottom, black, transparent 88%);
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+    .shell { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 30px; position: relative; }
+
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 64px; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+    .brand-mark {
+      width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px;
+      background: var(--lime); color: #10130b; box-shadow: 0 0 28px rgba(199,255,87,.22);
+    }
+    .brand-mark svg { width: 22px; height: 22px; }
+    .brand-name { font-size: 14px; letter-spacing: .16em; font-weight: 850; }
+    .brand-name span { color: var(--lime); }
+    .save-pill { display: inline-flex; align-items: center; gap: 9px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px; color: #aeb2c2; background: rgba(255,255,255,.025); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 750; }
+    .save-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 12px var(--lime); }
+
+    .intro { text-align: center; max-width: 700px; margin: 0 auto 42px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 9px; color: var(--lime); font-size: 11px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; margin-bottom: 17px; }
+    .eyebrow::before, .eyebrow::after { content: ""; width: 25px; height: 1px; background: rgba(199,255,87,.5); }
+    h1 { margin: 0; font-size: clamp(38px, 6vw, 68px); line-height: .98; letter-spacing: -.065em; font-weight: 900; }
+    h1 .accent { color: var(--lime); text-shadow: 0 0 40px rgba(199,255,87,.18); }
+    .intro p { margin: 19px 0 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
+
+    .workspace { display: grid; grid-template-columns: minmax(290px, .82fr) minmax(0, 1.18fr); gap: 18px; align-items: stretch; }
+    .card { position: relative; border: 1px solid var(--line); border-radius: var(--radius-xl); background: linear-gradient(145deg, rgba(22,25,39,.92), rgba(14,16,26,.88)); box-shadow: var(--shadow); overflow: hidden; }
+    .setup-card { padding: 27px; }
+    .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 25px; }
+    .section-heading h2 { margin: 0; font-size: 15px; letter-spacing: -.02em; }
+    .step-tag { color: #8e93a7; font-size: 10px; font-weight: 800; letter-spacing: .12em; border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; }
+    .field { margin-bottom: 19px; }
+    .field label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: #c5c8d4; font-size: 12px; font-weight: 700; }
+    .field label small { color: #70768b; font-size: 10px; font-weight: 600; }
+    .input-wrap { position: relative; }
+    .input-icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); width: 17px; height: 17px; color: #747a90; pointer-events: none; }
+    input {
+      width: 100%; height: 54px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px;
+      background: rgba(5,7,13,.48); color: var(--text); padding: 0 15px 0 44px; font-size: 14px;
+      transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+    input::placeholder { color: #555b6d; }
+    input:hover { border-color: rgba(255,255,255,.18); }
+    input:focus { border-color: rgba(199,255,87,.7); box-shadow: 0 0 0 4px rgba(199,255,87,.07); outline: none; background: rgba(5,7,13,.7); }
+    .range-hint { display: flex; align-items: center; gap: 7px; color: #777d91; font-size: 11px; margin-top: 9px; }
+    .range-hint strong { color: #c8cbd6; font-weight: 700; }
+    .error { display: none; margin: -3px 0 14px; color: #ff8790; font-size: 12px; line-height: 1.45; }
+    .error.show { display: block; }
+    .primary-btn {
+      width: 100%; min-height: 57px; border: 0; border-radius: 15px; display: flex; align-items: center; justify-content: center; gap: 11px;
+      color: #11150a; background: linear-gradient(135deg, #d8ff83, var(--lime)); font-weight: 900; font-size: 13px; letter-spacing: .02em;
+      box-shadow: 0 12px 28px rgba(199,255,87,.13); transition: transform .2s, box-shadow .2s, filter .2s;
+    }
+    .primary-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 32px rgba(199,255,87,.2); filter: saturate(1.08); }
+    .primary-btn:active { transform: translateY(0) scale(.99); }
+    .primary-btn:disabled { opacity: .72; cursor: wait; transform: none; }
+    .primary-btn svg { width: 18px; height: 18px; }
+    .microcopy { display: flex; align-items: center; justify-content: center; gap: 7px; color: #71768a; font-size: 10px; margin: 15px 0 0; }
+    .microcopy svg { width: 13px; height: 13px; color: var(--lime); }
+
+    .result-card { min-height: 450px; padding: 27px; display: flex; flex-direction: column; background: radial-gradient(circle at 50% 45%, rgba(155,134,255,.11), transparent 48%), linear-gradient(145deg, rgba(21,24,38,.96), rgba(12,14,23,.96)); }
+    .result-card::before { content: ""; position: absolute; width: 340px; height: 340px; border: 1px solid rgba(199,255,87,.07); border-radius: 50%; top: 52%; left: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 0 32px rgba(199,255,87,.018), 0 0 0 64px rgba(199,255,87,.012); pointer-events: none; }
+    .result-top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .result-top h2 { margin: 0; color: #c8cbd7; font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .live-tag { display: inline-flex; align-items: center; gap: 7px; color: #a8b38d; font-size: 10px; letter-spacing: .11em; font-weight: 800; text-transform: uppercase; }
+    .live-tag span { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); }
+    .result-center { flex: 1; position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 30px 0 22px; }
+    .result-caption { color: #8c91a4; font-size: 11px; letter-spacing: .18em; font-weight: 800; text-transform: uppercase; margin-bottom: 12px; }
+    .number-stage { width: min(100%, 350px); min-height: 160px; display: grid; place-items: center; position: relative; }
+    .number-stage::before { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; background: rgba(199,255,87,.055); filter: blur(30px); }
+    .big-number { position: relative; color: var(--lime); font-size: clamp(76px, 12vw, 132px); line-height: 1; letter-spacing: -.08em; font-weight: 950; text-shadow: 0 0 36px rgba(199,255,87,.16); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .big-number.placeholder { color: #454b5d; text-shadow: none; }
+    .big-number.pop { animation: numberPop .55s cubic-bezier(.16,1,.3,1); }
+    @keyframes numberPop { 0% { transform: scale(.78) rotate(-5deg); filter: blur(8px); opacity: .2; } 65% { transform: scale(1.09) rotate(2deg); filter: blur(0); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+    .result-subline { color: #878da0; font-size: 12px; margin-top: 10px; min-height: 18px; }
+    .result-subline strong { color: #e2e5ee; font-weight: 750; }
+    .result-meta { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; border-top: 1px solid var(--line); padding-top: 18px; gap: 10px; }
+    .meta-item { min-width: 0; }
+    .meta-item + .meta-item { border-left: 1px solid var(--line); padding-left: 16px; }
+    .meta-label { display: block; color: #73798d; font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 7px; }
+    .meta-value { display: block; color: #e0e2eb; font-size: 12px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .bottom-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-top: 18px; }
+    .status-note { display: flex; align-items: center; gap: 8px; color: #777d90; font-size: 11px; }
+    .status-note svg { width: 15px; height: 15px; color: var(--violet); flex: 0 0 auto; }
+    .clear-btn { display: inline-flex; align-items: center; gap: 8px; color: #a2a6b5; background: transparent; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; padding: 10px 13px; font-size: 11px; font-weight: 750; transition: .2s; }
+    .clear-btn:hover { color: #fff; border-color: rgba(255,107,118,.5); background: rgba(255,107,118,.07); }
+    .clear-btn svg { width: 14px; height: 14px; }
+    .footer { display: flex; justify-content: center; align-items: center; gap: 8px; color: #565c6f; font-size: 10px; letter-spacing: .06em; margin-top: 42px; text-align: center; }
+    .footer b { color: #8b90a2; font-weight: 700; }
+    .toast { position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translate(-50%, 18px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: 9px; padding: 12px 16px; border: 1px solid rgba(199,255,87,.2); border-radius: 13px; color: #e9f3d4; background: #171d13; box-shadow: 0 12px 40px rgba(0,0,0,.4); font-size: 12px; transition: .25s; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast svg { width: 16px; height: 16px; color: var(--lime); }
+    .confetti { position: absolute; width: 7px; height: 12px; border-radius: 2px; top: 50%; left: 50%; pointer-events: none; z-index: 3; animation: burst 900ms ease-out forwards; }
+    @keyframes burst { from { transform: translate(-50%,-50%) rotate(0) scale(1); opacity: 1; } to { transform: translate(var(--tx),var(--ty)) rotate(var(--rot)) scale(.2); opacity: 0; } }
+
+    @media (max-width: 780px) {
+      .shell { width: min(600px, calc(100% - 30px)); padding-top: 20px; }
+      .topbar { margin-bottom: 45px; }
+      .workspace { grid-template-columns: 1fr; }
+      .result-card { min-height: 390px; grid-row: 1; }
+      .setup-card { padding: 23px; }
+      .intro { margin-bottom: 30px; }
+      .intro p { font-size: 13px; }
+      .big-number { font-size: clamp(76px, 19vw, 120px); }
+    }
+    @media (max-width: 420px) {
+      .save-pill { font-size: 9px; padding: 8px 10px; }
+      .brand-name { font-size: 12px; }
+      .brand-mark { width: 38px; height: 38px; }
+      .setup-card, .result-card { padding: 20px; border-radius: 22px; }
+      .result-card { min-height: 365px; }
+      .bottom-row { align-items: flex-start; }
+      .status-note { max-width: 190px; line-height: 1.5; }
+      .clear-btn { padding: 9px 10px; }
+      .meta-item + .meta-item { padding-left: 10px; }
+      .meta-value { font-size: 11px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Lucky.exe home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m10 7.5 4 0M7.5 10v4m9-4v4m-2.5 2.5h-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-name">LUCKY<span>.</span>EXE</span>
+      </a>
+      <div class="save-pill"><span class="save-dot"></span> Local save enabled</div>
+    </header>
+
+    <section class="intro" id="top">
+      <div class="eyebrow">The random room</div>
+      <h1>Let fate pick<br><span class="accent">the number.</span></h1>
+      <p>Set your range, lock in your name, and let the universe handle the rest.<br>No refresh panic. Your result stays right here.</p>
+    </section>
+
+    <section class="workspace" aria-label="Random number selector">
+      <form class="card setup-card" id="drawForm" novalidate>
+        <div class="section-heading">
+          <h2>Configure your draw</h2>
+          <span class="step-tag">01 / SETUP</span>
+        </div>
+
+        <div class="field">
+          <label for="playerName">Your name <small>Who’s playing?</small></label>
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.7"/><path d="M5 20c.7-3.4 3.1-5.1 7-5.1s6.3 1.7 7 5.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <input id="playerName" name="playerName" type="text" placeholder="e.g. Abhi" maxlength="32" autocomplete="name" required />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="maxNumber">Maximum number <small>Set the upper limit</small></label>
+          <div class="input-wrap">
+            <svg class="input-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4 5 20M17 4l-3 16M3 9h17M2 15h17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <input id="maxNumber" name="maxNumber" type="number" inputmode="numeric" min="1" max="1000000000" step="1" placeholder="e.g. 100" required />
+          </div>
+          <div class="range-hint"><span>Number range:</span> <strong id="rangePreview">1 — ?</strong></div>
+        </div>
+
+        <p class="error" id="formError" role="alert"></p>
+        <button class="primary-btn" id="drawButton" type="submit">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.64 5.64l2.12 2.12m8.48 8.48 2.12 2.12m0-12.72-2.12 2.12m-8.48 8.48-2.12 2.12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.8"/></svg>
+          <span id="drawButtonText">Pick my number</span>
+        </button>
+        <p class="microcopy">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 5 6v5c0 4.7 2.9 8 7 10 4.1-2 7-5.3 7-10V6l-7-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Saved on this device · No account needed
+        </p>
+      </form>
+
+      <section class="card result-card" aria-live="polite" aria-atomic="true">
+        <div class="result-top">
+          <h2>Your lucky number</h2>
+          <div class="live-tag"><span></span> <span id="resultStatus">Awaiting draw</span></div>
+        </div>
+        <div class="result-center" id="numberArea">
+          <div class="result-caption" id="resultCaption">The universe says…</div>
+          <div class="number-stage"><div class="big-number placeholder" id="resultNumber">—</div></div>
+          <div class="result-subline" id="resultSubline">Your number will appear here.</div>
+        </div>
+        <div class="result-meta">
+          <div class="meta-item"><span class="meta-label">Player</span><span class="meta-value" id="metaName">Not set</span></div>
+          <div class="meta-item"><span class="meta-label">Range</span><span class="meta-value" id="metaRange">1 — ?</span></div>
+          <div class="meta-item"><span class="meta-label">Draw count</span><span class="meta-value" id="metaCount">0</span></div>
+        </div>
+      </section>
+    </section>
+
+    <div class="bottom-row">
+      <div class="status-note">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8v4l2.5 1.5M20 12a8 8 0 1 1-2.35-5.65" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M16 3.5h4v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="saveStatus">Your draw is stored in this browser.</span>
+      </div>
+      <button class="clear-btn" id="clearButton" type="button" title="Clear the saved name, range and result">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Clear saved draw
+      </button>
+    </div>
+
+    <footer class="footer"><span>BUILT FOR THE MOMENT</span><span>·</span><b>LUCKY.EXE</b><span>·</span><span>ONE TAP. ONE RESULT.</span></footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span id="toastMessage">Saved successfully</span>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const STORAGE_KEY = 'lucky-exe:number-draw:v1';
+      const MAX_ALLOWED = 1_000_000_000;
+      const form = document.getElementById('drawForm');
+      const nameInput = document.getElementById('playerName');
+      const maxInput = document.getElementById('maxNumber');
+      const rangePreview = document.getElementById('rangePreview');
+      const errorBox = document.getElementById('formError');
+      const drawButton = document.getElementById('drawButton');
+      const drawButtonText = document.getElementById('drawButtonText');
+      const resultNumber = document.getElementById('resultNumber');
+      const resultCaption = document.getElementById('resultCaption');
+      const resultSubline = document.getElementById('resultSubline');
+      const resultStatus = document.getElementById('resultStatus');
+      const metaName = document.getElementById('metaName');
+      const metaRange = document.getElementById('metaRange');
+      const metaCount = document.getElementById('metaCount');
+      const saveStatus = document.getElementById('saveStatus');
+      const clearButton = document.getElementById('clearButton');
+      const toast = document.getElementById('toast');
+      const toastMessage = document.getElementById('toastMessage');
+      const numberArea = document.getElementById('numberArea');
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      let savedState = null;
+      let toastTimer = null;
+      let spinning = false;
+
+      function isValidState(value) {
+        return value &&
+          typeof value.name === 'string' && value.name.trim().length > 0 &&
+          Number.isSafeInteger(value.max) && value.max >= 1 && value.max <= MAX_ALLOWED &&
+          Number.isSafeInteger(value.result) && value.result >= 1 && value.result <= value.max &&
+          Number.isSafeInteger(value.drawCount) && value.drawCount >= 1 &&
+          typeof value.drawnAt === 'string';
+      }
+
+      function loadSavedState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          return isValidState(parsed) ? parsed : null;
+        } catch (error) {
+          console.warn('Could not read the saved draw:', error);
+          return null;
+        }
+      }
+
+      function persistState(state) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          return true;
+        } catch (error) {
+          console.warn('Could not save the draw:', error);
+          showToast('Browser storage is unavailable');
+          return false;
+        }
+      }
+
+      function randomInteger(max) {
+        const range = max; // Inclusive range is 1..max.
+        if (window.crypto && window.crypto.getRandomValues) {
+          const buffer = new Uint32Array(1);
+          const ceiling = Math.floor(0x100000000 / range) * range;
+          let value;
+          do {
+            window.crypto.getRandomValues(buffer);
+            value = buffer[0];
+          } while (value >= ceiling);
+          return (value % range) + 1;
+        }
+        return Math.floor(Math.random() * range) + 1;
+      }
+
+      function formatTime(isoString) {
+        const date = new Date(isoString);
+        if (Number.isNaN(date.getTime())) return 'Saved';
+        return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+      }
+
+      function showToast(message) {
+        toastMessage.textContent = message;
+        toast.classList.add('show');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2400);
+      }
+
+      function setError(message) {
+        errorBox.textContent = message;
+        errorBox.classList.toggle('show', Boolean(message));
+      }
+
+      function updateRangePreview() {
+        const value = Number(maxInput.value);
+        rangePreview.textContent = Number.isSafeInteger(value) && value > 0 ? `1 — ${value.toLocaleString()}` : '1 — ?';
+      }
+
+      function updateButtonLabel() {
+        const hasSaved = Boolean(savedState);
+        const changed = hasSaved && (
+          nameInput.value.trim() !== savedState.name || Number(maxInput.value) !== savedState.max
+        );
+        drawButtonText.textContent = hasSaved ? (changed ? 'Update & pick number' : 'Draw again') : 'Pick my number';
+      }
+
+      function renderState(state, options = {}) {
+        if (!state) {
+          resultNumber.textContent = '—';
+          resultNumber.classList.add('placeholder');
+          resultCaption.textContent = 'The universe says…';
+          resultSubline.textContent = 'Your number will appear here.';
+          resultStatus.textContent = 'Awaiting draw';
+          metaName.textContent = 'Not set';
+          metaRange.textContent = '1 — ?';
+          metaCount.textContent = '0';
+          saveStatus.textContent = 'Your draw is stored in this browser.';
+          return;
+        }
+
+        resultNumber.textContent = state.result.toLocaleString();
+        resultNumber.classList.remove('placeholder');
+        resultCaption.textContent = 'Your number is';
+        resultSubline.innerHTML = `Picked for <strong></strong> · from 1 to ${state.max.toLocaleString()}`;
+        resultSubline.querySelector('strong').textContent = state.name;
+        resultStatus.textContent = 'Result saved';
+        metaName.textContent = state.name;
+        metaRange.textContent = `1 — ${state.max.toLocaleString()}`;
+        metaCount.textContent = state.drawCount.toLocaleString();
+        saveStatus.textContent = `Last draw saved at ${formatTime(state.drawnAt)} · safe on refresh`;
+
+        if (options.animate) {
+          resultNumber.classList.remove('pop');
+          void resultNumber.offsetWidth;
+          resultNumber.classList.add('pop');
+          if (!reducedMotion) launchConfetti();
+        }
+      }
+
+      function launchConfetti() {
+        const pieces = 22;
+        const shades = ['#c7ff57', '#9b86ff', '#ff73b7', '#f4f5fb'];
+        for (let i = 0; i < pieces; i++) {
+          const piece = document.createElement('span');
+          piece.className = 'confetti';
+          piece.style.background = shades[i % shades.length];
+          piece.style.setProperty('--tx', `${(Math.random() - .5) * 300}px`);
+          piece.style.setProperty('--ty', `${(Math.random() - .5) * 230}px`);
+          piece.style.setProperty('--rot', `${Math.random() * 680 - 340}deg`);
+          numberArea.appendChild(piece);
+          window.setTimeout(() => piece.remove(), 950);
+        }
+      }
+
+      function spinTo(finalNumber, max) {
+        if (reducedMotion) {
+          resultNumber.textContent = finalNumber.toLocaleString();
+          resultNumber.classList.remove('placeholder');
+          return Promise.resolve();
+        }
+        return new Promise(resolve => {
+          const duration = 1050;
+          const start = performance.now();
+          const tick = now => {
+            const elapsed = now - start;
+            if (elapsed >= duration) {
+              resultNumber.textContent = finalNumber.toLocaleString();
+              resolve();
+              return;
+            }
+            const progress = elapsed / duration;
+            const delay = 38 + Math.pow(progress, 2.1) * 170;
+            resultNumber.textContent = randomInteger(max).toLocaleString();
+            window.setTimeout(() => requestAnimationFrame(tick), delay);
+          };
+          resultNumber.classList.remove('placeholder');
+          requestAnimationFrame(tick);
+        });
+      }
+
+      async function draw(name, max) {
+        if (spinning) return;
+        spinning = true;
+        drawButton.disabled = true;
+        drawButtonText.textContent = 'Picking your number…';
+        setError('');
+
+        const nextState = {
+          name,
+          max,
+          result: randomInteger(max),
+          drawCount: savedState ? savedState.drawCount + 1 : 1,
+          drawnAt: new Date().toISOString()
+        };
+        // Persist before the visual spin so even an immediate refresh keeps the final result.
+        persistState(nextState);
+        savedState = nextState;
+        nameInput.value = name;
+        maxInput.value = String(max);
+        updateRangePreview();
+        resultCaption.textContent = 'Finding your number…';
+        resultSubline.textContent = 'Lock it in. The result is on its way.';
+        resultStatus.textContent = 'Selecting';
+        metaName.textContent = name;
+        metaRange.textContent = `1 — ${max.toLocaleString()}`;
+        metaCount.textContent = nextState.drawCount.toLocaleString();
+        saveStatus.textContent = 'Your result is being saved on this device.';
+
+        await spinTo(nextState.result, max);
+        renderState(nextState, { animate: true });
+        drawButton.disabled = false;
+        spinning = false;
+        updateButtonLabel();
+        showToast('Your number is saved. Refresh-safe.');
+      }
+
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        const name = nameInput.value.trim().replace(/\s+/g, ' ');
+        const max = Number(maxInput.value);
+
+        if (!name) {
+          setError('Enter a name first — the picker needs to know who’s playing.');
+          nameInput.focus();
+          return;
+        }
+        if (name.length > 32) {
+          setError('Keep the name under 32 characters.');
+          nameInput.focus();
+          return;
+        }
+        if (!Number.isSafeInteger(max) || max < 1 || max > MAX_ALLOWED) {
+          setError('Enter a whole number between 1 and 1,000,000,000.');
+          maxInput.focus();
+          return;
+        }
+        draw(name, max);
+      });
+
+      nameInput.addEventListener('input', () => { setError(''); updateButtonLabel(); });
+      maxInput.addEventListener('input', () => { setError(''); updateRangePreview(); updateButtonLabel(); });
+
+      clearButton.addEventListener('click', () => {
+        if (spinning) return;
+        try { localStorage.removeItem(STORAGE_KEY); } catch (error) { console.warn('Could not clear local storage:', error); }
+        savedState = null;
+        form.reset();
+        setError('');
+        updateRangePreview();
+        renderState(null);
+        updateButtonLabel();
+        showToast('Saved draw cleared');
+        nameInput.focus();
+      });
+
+      // Restore the last draw and form values after refresh.
+      savedState = loadSavedState();
+      if (savedState) {
+        nameInput.value = savedState.name;
+        maxInput.value = String(savedState.max);
+        renderState(savedState);
+      }
+      updateRangePreview();
+      updateButtonLabel();
+    })();
+  </script>
+</body>
+</html>
